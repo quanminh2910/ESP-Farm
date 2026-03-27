@@ -2,7 +2,6 @@
 #include <Wire.h>
 #include <DHT.h>
 #include <LiquidCrystal_I2C.h>
-#include "adafruit_io_client.h"
 
 #define SOIL_PIN 34
 #define DHTPIN 4
@@ -15,23 +14,22 @@
 DHT dht(DHTPIN, DHTTYPE);
 
 // LCD 2004A = 20 columns, 4 rows
+// Common I2C addresses are often 0x27 or 0x3F
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
 // Adjust after calibration
 const int dryValue = 3200;
 const int wetValue = 1400;
 
-// Upload every 10 seconds
-const unsigned long uploadIntervalMs = 10000;
-unsigned long lastUploadMs = 0;
-
 void printLCD(float temperatureC, float humidity, int soilRaw, int soilPercent, bool dhtOk) {
-    char line[21];
+    char line[21]; // 20 chars + null terminator
 
-    lcd.setCursor(0, 0);
+    // Row 0
     snprintf(line, sizeof(line), "ESP32 FARM MONITOR  ");
+    lcd.setCursor(0, 0);
     lcd.print(line);
 
+    // Row 1
     lcd.setCursor(0, 1);
     if (dhtOk) {
         snprintf(line, sizeof(line), "T:%4.1f%cC H:%4.0f%%   ",
@@ -41,12 +39,14 @@ void printLCD(float temperatureC, float humidity, int soilRaw, int soilPercent, 
     }
     lcd.print(line);
 
-    lcd.setCursor(0, 2);
+    // Row 2
     snprintf(line, sizeof(line), "Soil Raw: %-6d     ", soilRaw);
+    lcd.setCursor(0, 2);
     lcd.print(line);
 
-    lcd.setCursor(0, 3);
+    // Row 3
     snprintf(line, sizeof(line), "Soil Moist: %3d%%   ", soilPercent);
+    lcd.setCursor(0, 3);
     lcd.print(line);
 }
 
@@ -54,7 +54,7 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
-    analogReadResolution(12);
+    analogReadResolution(12); // 0-4095 on ESP32
     dht.begin();
 
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -71,13 +71,9 @@ void setup() {
     lcd.clear();
 
     Serial.println("ESP32 + DHT11 + Soil Moisture Sensor");
-
-    beginAdafruitIO();
 }
 
 void loop() {
-    updateAdafruitIO();
-
     float humidity = dht.readHumidity();
     float temperatureC = dht.readTemperature();
 
@@ -92,7 +88,7 @@ void loop() {
     } else {
         Serial.print("Temperature: ");
         Serial.print(temperatureC);
-        Serial.println(" C");
+        Serial.println(" °C");
 
         Serial.print("Humidity: ");
         Serial.print(humidity);
@@ -108,11 +104,6 @@ void loop() {
     Serial.println("------------------------");
 
     printLCD(temperatureC, humidity, soilRaw, soilPercent, dhtOk);
-
-    if (millis() - lastUploadMs >= uploadIntervalMs) {
-        lastUploadMs = millis();
-        sendToAdafruitIO(temperatureC, humidity, soilRaw, soilPercent, dhtOk);
-    }
 
     delay(2000);
 }
