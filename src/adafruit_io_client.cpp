@@ -36,7 +36,7 @@ void updateAdafruitIO() {
 
     static aio_status_t lastStatus = AIO_IDLE;
     aio_status_t currentStatus = io.status();
-
+    // print when status changes
     if (currentStatus != lastStatus) {
         Serial.print("Adafruit IO status: ");
         Serial.println(io.statusText());
