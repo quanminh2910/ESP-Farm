@@ -7,6 +7,7 @@
 #define SOIL_PIN 34
 #define DHTPIN 4
 #define DHTTYPE DHT11
+#define ALERT_LED_PIN 2
 
 // I2C pins for generic ESP32
 #define I2C_SDA 21
@@ -21,9 +22,27 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 const int dryValue = 3200;
 const int wetValue = 1400;
 
+// Temperature alert threshold (C)
+const float tempAlertOnC = 33.0f;
+const float tempAlertOffC = 32.0f; // hysteresis to reduce LED flicker near threshold
+
+bool tempAlertActive = false;
+
 // Upload every 10 seconds
 const unsigned long uploadIntervalMs = 10000;
 unsigned long lastUploadMs = 0;
+
+void updateTempAlertLED(float temperatureC, bool dhtOk) {
+    if (!dhtOk) {
+        tempAlertActive = false;
+    } else if (!tempAlertActive && temperatureC >= tempAlertOnC) {
+        tempAlertActive = true;
+    } else if (tempAlertActive && temperatureC <= tempAlertOffC) {
+        tempAlertActive = false;
+    }
+
+    digitalWrite(ALERT_LED_PIN, tempAlertActive ? HIGH : LOW);
+}
 
 void printLCD(float temperatureC, float humidity, int soilRaw, int soilPercent, bool dhtOk) {
     char line[21];
@@ -54,6 +73,9 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
+    pinMode(ALERT_LED_PIN, OUTPUT);
+    digitalWrite(ALERT_LED_PIN, LOW);
+
     analogReadResolution(12);
     dht.begin();
 
@@ -71,6 +93,11 @@ void setup() {
     lcd.clear();
 
     Serial.println("ESP32 + DHT11 + Soil Moisture Sensor");
+    Serial.print("Temperature alert LED pin: ");
+    Serial.println(ALERT_LED_PIN);
+    Serial.print("Alert turns ON at ");
+    Serial.print(tempAlertOnC);
+    Serial.println(" C");
 
     beginAdafruitIO();
 }
@@ -86,6 +113,7 @@ void loop() {
     soilPercent = constrain(soilPercent, 0, 100);
 
     bool dhtOk = !(isnan(humidity) || isnan(temperatureC));
+    updateTempAlertLED(temperatureC, dhtOk);
 
     if (!dhtOk) {
         Serial.println("Failed to read from DHT11");

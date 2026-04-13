@@ -4,7 +4,6 @@
 
 // Create Adafruit IO connection
 AdafruitIO_WiFi io(IO_USERNAME, IO_KEY, WIFI_SSID, WIFI_PASS);
-
 // Create/feed names in Adafruit IO
 AdafruitIO_Feed *temperatureFeed = io.feed("temperature");
 AdafruitIO_Feed *humidityFeed    = io.feed("humidity");
@@ -16,7 +15,7 @@ void beginAdafruitIO() {
     io.connect();
 
     unsigned long start = millis();
-    while (io.status() < AIO_CONNECTED && millis() - start < 30000) {
+    while (io.status() < AIO_CONNECTED && millis() - start < 30000) { // wait for 30 seconds max
         io.run();
         Serial.print(".");
         delay(500);
