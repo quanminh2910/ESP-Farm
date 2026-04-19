@@ -10,10 +10,12 @@ struct IOConfig {
 };
 
 void beginIOFunctions(const IOConfig &config);
-void showIOSplashScreen();
+void showIOSplashScreen(); 
 void updateTempAlertLED(float temperatureC, bool dhtOk);
 void printLCD(float temperatureC,
               float humidity,
               int soilRaw,
               int soilPercent,
-              bool dhtOk);
+              bool dhtEnabled,
+              bool dhtOk,
+              bool soilEnabled);

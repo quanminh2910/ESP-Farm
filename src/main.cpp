@@ -14,11 +14,11 @@ const int dryValue = 3200;
 const int wetValue = 1400;
 
 const IOConfig ioConfig = {
-    2,
-    21,
-    22,
-    33.0f,
-    32.0f
+    2, // Alert LED pin
+    21, // I2C SDA pin
+    22, // I2C SCL pin
+    33.0f, // Temperature alert on 
+    32.0f  // Temperature alert off to avoid flickering
 };
 
 // Upload to Adafruit IO every 10 seconds
@@ -29,7 +29,7 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
-    analogReadResolution(12);
+    analogReadResolution(12); 
     dht.begin();
 
     beginIOFunctions(ioConfig);
@@ -48,19 +48,31 @@ void setup() {
 void loop() {
     updateAdafruitIO();
 
-    float humidity = dht.readHumidity();
-    float temperatureC = dht.readTemperature();
+    bool dhtEnabled = isDhtSensorEnabled();
+    bool soilEnabled = isSoilSensorEnabled();
 
-    int soilRaw = analogRead(SOIL_PIN);
-    int soilPercent = map(soilRaw, dryValue, wetValue, 0, 100);
-    soilPercent = constrain(soilPercent, 0, 100);
+    float humidity = 0.0f;
+    float temperatureC = 0.0f;
+    bool dhtOk = false;
+    if (dhtEnabled) {
+        humidity = dht.readHumidity();
+        temperatureC = dht.readTemperature();
+        dhtOk = !(isnan(humidity) || isnan(temperatureC));
+    }
 
-    bool dhtOk = !(isnan(humidity) || isnan(temperatureC));
-    updateTempAlertLED(temperatureC, dhtOk);
+    int soilRaw = 0;
+    int soilPercent = 0;
+    if (soilEnabled) {
+        soilRaw = analogRead(SOIL_PIN);
+        soilPercent = map(soilRaw, dryValue, wetValue, 0, 100);
+        soilPercent = constrain(soilPercent, 0, 100);
+    }
 
-    if (!dhtOk) {
+    updateTempAlertLED(temperatureC, dhtEnabled && dhtOk);
+
+    if (dhtEnabled && !dhtOk) {
         Serial.println("Failed to read from DHT11");
-    } else {
+    } else if (dhtEnabled) {
         Serial.print("Temperature: ");
         Serial.print(temperatureC);
         Serial.println(" C");
@@ -68,21 +80,39 @@ void loop() {
         Serial.print("Humidity: ");
         Serial.print(humidity);
         Serial.println(" %");
+    } else {
+        Serial.println("DHT11 sensor disabled by remote control.");
     }
 
-    Serial.print("Soil Raw: ");
-    Serial.print(soilRaw);
-    Serial.print(" | Soil Moisture: ");
-    Serial.print(soilPercent);
-    Serial.println(" %");
+    if (soilEnabled) {
+        Serial.print("Soil Raw: ");
+        Serial.print(soilRaw);
+        Serial.print(" | Soil Moisture: ");
+        Serial.print(soilPercent);
+        Serial.println(" %");
+    } else {
+        Serial.println("Soil sensor disabled by remote control.");
+    }
 
     Serial.println("------------------------");
 
-    printLCD(temperatureC, humidity, soilRaw, soilPercent, dhtOk);
+    printLCD(temperatureC,
+             humidity,
+             soilRaw,
+             soilPercent,
+             dhtEnabled,
+             dhtOk,
+             soilEnabled);
 
     if (millis() - lastUploadMs >= uploadIntervalMs) {
         lastUploadMs = millis();
-        sendToAdafruitIO(temperatureC, humidity, soilRaw, soilPercent, dhtOk);
+        sendToAdafruitIO(temperatureC,
+                         humidity,
+                         dhtEnabled,
+                         dhtOk,
+                         soilRaw,
+                         soilPercent,
+                         soilEnabled);
     } else {
         // Still need to call io.run() regularly to maintain connection
         updateAdafruitIO();
