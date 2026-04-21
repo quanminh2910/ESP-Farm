@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <DHT.h>
 #include "adafruit_io_client.h"
+#include "database_client.h"
 #include "io_functions.h"
 
 #define SOIL_PIN 34
@@ -43,6 +44,7 @@ void setup() {
     Serial.println(" C");
 
     beginAdafruitIO();
+    beginDatabaseClient();
 }
 
 void loop() {
@@ -113,6 +115,15 @@ void loop() {
                          soilRaw,
                          soilPercent,
                          soilEnabled);
+
+        sendToDatabase(temperatureC,
+                       humidity,
+                       dhtEnabled,
+                       dhtOk,
+                       soilRaw,
+                       soilPercent,
+                       soilEnabled,
+                       millis());
     } else {
         // Still need to call io.run() regularly to maintain connection
         updateAdafruitIO();
