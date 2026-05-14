@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Session } from '@supabase/supabase-js'
 import {
   Brush,
   CartesianGrid,
@@ -11,6 +12,7 @@ import {
 } from 'recharts'
 import mqtt, { type MqttClient } from 'mqtt'
 import { fetchSensorHistory } from './api/sensorApi'
+import { getSupabaseClient } from './lib/supabase'
 import type { SensorReading } from './types/sensor'
 import './App.css'
 
@@ -257,7 +259,139 @@ function MetricChart({
   )
 }
 
+function AuthCard() {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const mapAuthErrorMessage = (rawMessage: string) => {
+    const message = rawMessage.toLowerCase()
+
+    if (message.includes('invalid login credentials')) {
+      return 'Incorrect email or password.'
+    }
+    if (message.includes('email not confirmed')) {
+      return 'Email not confirmed. Please check your inbox.'
+    }
+    if (message.includes('password should be at least')) {
+      return 'Password must be at least 6 characters.'
+    }
+    if (message.includes('user already registered')) {
+      return 'This email is already registered.'
+    }
+    if (message.includes('invalid email')) {
+      return 'Invalid email address.'
+    }
+
+    return rawMessage
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setLoading(true)
+    setError(null)
+    setNotice(null)
+    const trimmedEmail = email.trim()
+
+    try {
+      const supabase = getSupabaseClient()
+      if (mode === 'signup') {
+        const { error: signUpError } = await supabase.auth.signUp({
+          email: trimmedEmail,
+          password,
+        })
+        if (signUpError) {
+          throw signUpError
+        }
+        setNotice('Sign up successful. Check your email to confirm your account.')
+      } else {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: trimmedEmail,
+          password,
+        })
+        if (signInError) {
+          throw signInError
+        }
+      }
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error
+          ? mapAuthErrorMessage(submitError.message)
+          : 'Unable to authenticate.'
+      setError(message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <main className="dashboard">
+      <section className="auth-panel">
+        <h1>ESP Farm</h1>
+        <p>{mode === 'signin' ? 'Sign in to access the dashboard.' : 'Create a new account.'}</p>
+
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label htmlFor="email">Email</label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            minLength={6}
+          />
+
+          <button type="submit" className="refresh-button" disabled={loading}>
+            {loading ? 'Processing...' : mode === 'signup' ? 'Create account' : 'Sign in'}
+          </button>
+        </form>
+
+        {notice && <p className="status">{notice}</p>}
+        {error && <p className="status error">{error}</p>}
+
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => {
+            setMode((prev) => (prev === 'signin' ? 'signup' : 'signin'))
+            setError(null)
+            setNotice(null)
+          }}
+        >
+          {mode === 'signin'
+            ? "Don't have an account? Sign up"
+            : 'Already have an account? Sign in'}
+        </button>
+      </section>
+    </main>
+  )
+}
+
 function App() {
+  const authClientResult = useMemo(() => {
+    try {
+      return { client: getSupabaseClient(), error: null as string | null }
+    } catch (error) {
+      return {
+        client: null,
+        error: error instanceof Error ? error.message : 'Cau hinh Supabase khong hop le',
+      }
+    }
+  }, [])
+  const authClient = authClientResult.client
+
   const adafruitUsername = import.meta.env.VITE_ADAFRUIT_USERNAME as string | undefined
   const adafruitKey = import.meta.env.VITE_ADAFRUIT_KEY as string | undefined
   const mqttUrl =
@@ -288,6 +422,9 @@ function App() {
     temperature: false,
     soil: false,
   })
+  const [session, setSession] = useState<Session | null>(null)
+  const [authLoading, setAuthLoading] = useState(() => authClient !== null)
+  const [authError, setAuthError] = useState<string | null>(null)
   const mqttClientRef = useRef<MqttClient | null>(null)
 
   const feedByKey = useMemo<Record<ControlKey, string>>(
@@ -304,6 +441,10 @@ function App() {
   }, [])
 
   const syncControlStates = useCallback(async () => {
+    if (!session) {
+      return
+    }
+
     if (!adafruitUsername || !adafruitKey) {
       return
     }
@@ -337,7 +478,7 @@ function App() {
       const message = err instanceof Error ? err.message : 'Failed to sync switches'
       setMqttError(message)
     }
-  }, [adafruitKey, adafruitUsername, getFeedKeyFromTopic, soilFeed, temperatureFeed])
+  }, [adafruitKey, adafruitUsername, getFeedKeyFromTopic, session, soilFeed, temperatureFeed])
 
   const keyByFeed = useMemo<Record<string, ControlKey>>(
     () => ({
@@ -348,6 +489,10 @@ function App() {
   )
 
   const loadSensorData = useCallback(async (silent = false) => {
+    if (!session) {
+      return
+    }
+
     if (!silent) {
       setLoading(true)
     }
@@ -365,19 +510,59 @@ function App() {
         setLoading(false)
       }
     }
-  }, [])
+  }, [session])
+
+  useEffect(() => {
+    if (!authClient) {
+      return
+    }
+
+    authClient.auth
+      .getSession()
+      .then(({ data, error: getSessionError }) => {
+        if (getSessionError) {
+          throw getSessionError
+        }
+        setSession(data.session)
+        setAuthLoading(false)
+      })
+      .catch((sessionError) => {
+        const message =
+          sessionError instanceof Error ? sessionError.message : 'Khong the tai phien dang nhap'
+        setAuthError(message)
+        setAuthLoading(false)
+      })
+
+    const {
+      data: { subscription },
+    } = authClient.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [authClient])
 
     // auto-refresh every 12s (silent chart load + switch sync)
     useEffect(() => {
+      if (!session) {
+        return
+      }
+
         const interval = setInterval(() => {
             void loadSensorData(true) // silent = true to avoid flicker
             void syncControlStates()
         }, 12_000)
 
         return () => clearInterval(interval)
-    }, [loadSensorData, syncControlStates])
+    }, [loadSensorData, session, syncControlStates])
 
   useEffect(() => {
+    if (!session) {
+      return
+    }
+
     if (!hasMqttConfig) {
       return
     }
@@ -439,7 +624,9 @@ function App() {
     hasMqttConfig,
     keyByFeed,
     mqttUrl,
+    session,
     soilFeed,
+    syncControlStates,
     temperatureFeed,
   ])
 
@@ -477,17 +664,57 @@ function App() {
     void syncControlStates()
   }, [loadSensorData, syncControlStates])
 
+  const handleSignOut = useCallback(async () => {
+    try {
+      const supabase = getSupabaseClient()
+      await supabase.auth.signOut()
+    } catch (signOutError) {
+      const message = signOutError instanceof Error ? signOutError.message : 'Dang xuat that bai'
+      setError(message)
+    }
+  }, [])
+
+  if (authLoading) {
+    return (
+      <main className="dashboard">
+        <section className="auth-panel">
+          <p className="status">Dang kiem tra phien dang nhap...</p>
+        </section>
+      </main>
+    )
+  }
+
+  if (authClientResult.error || authError) {
+    return (
+      <main className="dashboard">
+        <section className="auth-panel">
+          <p className="status error">{authClientResult.error ?? authError}</p>
+        </section>
+      </main>
+    )
+  }
+
+  if (!session) {
+    return <AuthCard />
+  }
+
   return (
     <main className="dashboard">
       <section className="panel">
         <header className="panel-header">
           <div>
-            <h1>ESP Farm Dashboard</h1>
+            <h1>ESP Farm</h1>
             <p>Live sensor trends from Supabase</p>
           </div>
-          <button className="refresh-button" onClick={handleRefresh}>
-            Refresh
-          </button>
+          <div className="header-actions">
+            <span className="user-chip">{session.user.email}</span>
+            <button className="refresh-button" onClick={handleRefresh}>
+              Refresh
+            </button>
+            <button className="refresh-button" onClick={() => void handleSignOut()}>
+              Dang xuat
+            </button>
+          </div>
         </header>
 
         <section className="controls-panel">
