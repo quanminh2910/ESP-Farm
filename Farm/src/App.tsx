@@ -271,19 +271,19 @@ function AuthCard() {
     const message = rawMessage.toLowerCase()
 
     if (message.includes('invalid login credentials')) {
-      return 'Email hoac mat khau khong dung.'
+      return 'Incorrect email or password.'
     }
     if (message.includes('email not confirmed')) {
-      return 'Tai khoan chua xac minh email.'
+      return 'Email not confirmed. Please check your inbox.'
     }
     if (message.includes('password should be at least')) {
-      return 'Mat khau phai co it nhat 6 ky tu.'
+      return 'Password must be at least 6 characters.'
     }
     if (message.includes('user already registered')) {
-      return 'Email nay da duoc dang ky.'
+      return 'This email is already registered.'
     }
     if (message.includes('invalid email')) {
-      return 'Email khong hop le.'
+      return 'Invalid email address.'
     }
 
     return rawMessage
@@ -306,7 +306,7 @@ function AuthCard() {
         if (signUpError) {
           throw signUpError
         }
-        setNotice('Dang ky thanh cong. Kiem tra email de xac minh tai khoan.')
+        setNotice('Sign up successful. Check your email to confirm your account.')
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: trimmedEmail,
@@ -320,7 +320,7 @@ function AuthCard() {
       const message =
         submitError instanceof Error
           ? mapAuthErrorMessage(submitError.message)
-          : 'Khong the xac thuc'
+          : 'Unable to authenticate.'
       setError(message)
     } finally {
       setLoading(false)
@@ -331,7 +331,7 @@ function AuthCard() {
     <main className="dashboard">
       <section className="auth-panel">
         <h1>ESP Farm</h1>
-        <p>{mode === 'signin' ? 'Dang nhap de vao dashboard chung.' : 'Tao tai khoan moi.'}</p>
+        <p>{mode === 'signin' ? 'Sign in to access the dashboard.' : 'Create a new account.'}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <label htmlFor="email">Email</label>
@@ -343,7 +343,7 @@ function AuthCard() {
             required
           />
 
-          <label htmlFor="password">Mat khau</label>
+          <label htmlFor="password">Password</label>
           <input
             id="password"
             type="password"
@@ -354,7 +354,7 @@ function AuthCard() {
           />
 
           <button type="submit" className="refresh-button" disabled={loading}>
-            {loading ? 'Dang xu ly...' : mode === 'signup' ? 'Tao tai khoan' : 'Dang nhap'}
+            {loading ? 'Processing...' : mode === 'signup' ? 'Create account' : 'Sign in'}
           </button>
         </form>
 
@@ -370,7 +370,9 @@ function AuthCard() {
             setNotice(null)
           }}
         >
-          {mode === 'signin' ? 'Chua co tai khoan? Dang ky' : 'Da co tai khoan? Dang nhap'}
+          {mode === 'signin'
+            ? "Don't have an account? Sign up"
+            : 'Already have an account? Sign in'}
         </button>
       </section>
     </main>
